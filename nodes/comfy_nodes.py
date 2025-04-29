@@ -19,6 +19,13 @@ else:
     current_paths, _ = folder_paths.folder_names_and_paths["ipadapter"]
 folder_paths.folder_names_and_paths["ipadapter"] = (current_paths, folder_paths.supported_pt_extensions)
 
+# Add lora path configuration
+if "loras" not in folder_paths.folder_names_and_paths:
+    lora_paths = [os.path.join(folder_paths.models_dir, "loras")]
+else:
+    lora_paths, _ = folder_paths.folder_names_and_paths["loras"]
+folder_paths.folder_names_and_paths["loras"] = (lora_paths, folder_paths.supported_pt_extensions)
+
 
 class InstantCharacterLoadModel:
     @classmethod
@@ -129,4 +136,43 @@ class InstantCharacterGenerate:
             image = image.unsqueeze(0)
         
         return (image,)
+
+
+class InstantCharacterGenerateWithStyleLora(InstantCharacterGenerate):
+    @classmethod
+    def INPUT_TYPES(cls):
+        input_types = super().INPUT_TYPES()
+        input_types["required"].update({
+            "lora_name": (folder_paths.get_filename_list("loras"), ),
+            "lora_weight": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1}),
+            "trigger_word": ("STRING", {"default": "", "multiline": False}),
+        })
+        return input_types
+    
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "generate_with_lora"
+    CATEGORY = "InstantCharacter"
+
+    def generate_with_lora(self, pipe, prompt, height, width, guidance_scale, 
+                         num_inference_steps, seed, subject_scale, lora_name,
+                         lora_weight, trigger_word, subject_image=None):
+        
+        # Get full path of lora file
+        lora_path = folder_paths.get_full_path("loras", lora_name)
+        
+        # Add trigger word to prompt if provided
+        if trigger_word and trigger_word.strip():
+            prompt = f"{trigger_word}, {prompt}"
+        
+        # Apply style lora
+        pipe.with_style_lora(lora_path, lora_weight)
+        
+        # Generate image using parent class method
+        result = super().generate(pipe, prompt, height, width, guidance_scale,
+                                num_inference_steps, seed, subject_scale, subject_image)
+        
+        # Remove style lora by applying negative weight
+        pipe.with_style_lora(lora_path, -lora_weight)
+        
+        return result
 
