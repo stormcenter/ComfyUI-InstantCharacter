@@ -20,6 +20,45 @@ else:
 folder_paths.folder_names_and_paths["ipadapter"] = (current_paths, folder_paths.supported_pt_extensions)
 
 
+class InstantCharacterLoadModelFromLocal:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                # 模型路径输入替换为 STRING 类型，用户可手动输入路径
+                "base_model_path": ("STRING", {"default": "models/FLUX.1-dev", "tooltip": ""}),
+                "image_encoder_path": ("STRING", {"default": "models/google/siglip-so400m-patch14-384", "tooltip": ""}),
+                "image_encoder_2_path": ("STRING", {"default": "models/facebook/dinov2-giant", "tooltip": ""}),
+                "ip_adapter_path": ("STRING", {"default": "models/InstantCharacter/instantcharacter_ip-adapter.bin", "tooltip": ""}),
+                "cpu_offload": ("BOOLEAN", {"default": False, "tooltip": "是否启用CPU卸载以节省显存"}),
+            }
+        }
+
+    RETURN_TYPES = ("INSTANTCHAR_PIPE",)
+    FUNCTION = "load_model"
+    CATEGORY = "InstantCharacter"
+    DESCRIPTION = "加载InstantCharacter模型并支持自定义模型路径"
+    
+    def load_model(self, base_model_path, image_encoder_path, image_encoder_2_path, ip_adapter_path, cpu_offload):
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        pipe = InstantCharacterFluxPipeline.from_pretrained(base_model_path, torch_dtype=torch.bfloat16)
+
+        if cpu_offload:
+            pipe.enable_sequential_cpu_offload()
+        else:
+            pipe.to(device)
+        
+        pipe.init_adapter(
+            image_encoder_path=image_encoder_path, 
+            image_encoder_2_path=image_encoder_2_path, 
+            subject_ipadapter_cfg=dict(subject_ip_adapter_path=ip_adapter_path, nb_token=1024), 
+        )
+
+        return (pipe,)
+
+
 class InstantCharacterLoadModel:
     @classmethod
     def INPUT_TYPES(cls):
